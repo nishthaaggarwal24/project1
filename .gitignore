@@ -1,0 +1,24 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Frontend dependencies and generated builds
+node_modules/
+dist/
+
+# Local dream data and audit trails (may contain private narratives)
+backend/data/*.csv
+backend/data/*.jsonl
+!backend/data/.gitkeep
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
