@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
+from sklearn.decomposition import TruncatedSVD
 from data_loader import data_loader
 from services.nlp_service import nlp_service
 from services.embedding_service import embedding_service
@@ -50,16 +51,29 @@ def get_cluster_analysis():
     n=len(df)
     if n<3: return {"available":False,"records_count":n,"clusters":[],"limitation":"At least three real narratives are required for clustering."}
     vectorizer=TfidfVectorizer(max_features=20000,min_df=2,stop_words="english",sublinear_tf=True)
-    tfidf=vectorizer.fit_transform(texts)
+    try:
+        tfidf=vectorizer.fit_transform(texts)
+    except ValueError as exc:
+        return {"available":False,"records_count":n,"clusters":[],"limitation":f"The source narratives do not contain enough usable terms to form clusters ({exc})."}
     embeddings=embedding_service.encode_corpus(texts)
-    if embeddings is None:
-        return {"available":False,"records_count":n,"clusters":[],"limitation":"Sentence embedding clustering is unavailable. Install sentence-transformers and make all-MiniLM-L6-v2 model weights available; no keyword or TF-IDF clustering fallback is used."}
-    reduced=np.asarray(embeddings); method="all-MiniLM-L6-v2 sentence embeddings → K-Means"
+    if embeddings is not None:
+        reduced=np.asarray(embeddings); method="all-MiniLM-L6-v2 sentence embeddings → K-Means"
+        limitations=[]
+    else:
+        # Reproducible lexical fallback: clusters still come from the real source
+        # narratives, with terms reduced to a compact semantic space before K-Means.
+        components=min(100,tfidf.shape[1]-1,n-1)
+        if components<2:
+            return {"available":False,"records_count":n,"clusters":[],"limitation":"Not enough distinct narrative terms are available to reduce the source text into a cluster space."}
+        reduced=TruncatedSVD(n_components=components,random_state=42,n_iter=7).fit_transform(tfidf)
+        method="TF-IDF → TruncatedSVD → K-Means (deterministic fallback; sentence embeddings unavailable)"
+        limitations=["Sentence embeddings were unavailable, so clusters use TF-IDF word patterns reduced with TruncatedSVD. They are descriptive text groupings, not psychological categories."]
     max_k=min(8,n-1); scores=[]; fitted={}
     for k in range(2,max_k+1):
         model=KMeans(n_clusters=k,random_state=42,n_init=10)
         labels=model.fit_predict(reduced); fitted[k]=(model,labels)
-        scores.append({"k":k,"inertia":float(model.inertia_),"silhouette":float(silhouette_score(reduced,labels,metric="euclidean"))})
+        sample_size=min(n,2000)
+        scores.append({"k":k,"inertia":float(model.inertia_),"silhouette":float(silhouette_score(reduced,labels,metric="euclidean",sample_size=sample_size,random_state=42) if sample_size<n else silhouette_score(reduced,labels,metric="euclidean"))})
     inertias={item["k"]:item["inertia"] for item in scores}
     raw_elbow={item["k"]:max(0.0,inertias.get(item["k"]-1,0)-2*item["inertia"]+inertias.get(item["k"]+1,0)) for item in scores}
     sil_values=[item["silhouette"] for item in scores]; sil_min=min(sil_values); sil_max=max(sil_values)
@@ -85,9 +99,12 @@ def get_cluster_analysis():
                        "sentiment":str(group.Sentiment.mode().iloc[0]) if "Sentiment" in group and not group.Sentiment.mode().empty else "Unavailable",
                        "emotion_distribution":[{"emotion":str(k),"value":int(v)} for k,v in emo.value_counts().items()],
                        "dominant_symbols":sorted([{"symbol":k,"count":v} for k,v in symbols.items()],key=lambda x:x["count"],reverse=True)[:5]})
+    best_silhouette=next(item["silhouette"] for item in scores if item["k"]==best)
+    if best_silhouette<0.1:
+        limitations.append(f"The selected grouping has a low silhouette score ({best_silhouette:.3f}), indicating substantial overlap between clusters. Treat these as broad text groupings.")
     response={"available":True,"records_count":n,"clusters":result,"selected_k":best,
-              "cluster_count_scores":scores,"method":method+"; all source narratives are used, random_state=42, n_init=10. Candidate k=2..8 are scored using full-data silhouette and normalized elbow curvature with equal weight.",
-              "limitations":["Cluster names and top keywords are descriptive labels from source narratives; cluster assignment uses sentence embeddings.","Source Cluster_ID is blank and is ignored; assignments are derived from Dream_Text."]}
+              "cluster_count_scores":scores,"method":method,
+              "limitations":limitations+["Cluster names and top keywords are descriptive labels from source narratives, not psychological categories.","All source narratives are assigned with random_state=42 and n_init=10. Candidate k=2..8 are scored using silhouette and normalized elbow curvature with equal weight; silhouette uses a deterministic sample of up to 2,000 records.","Source Cluster_ID is ignored; assignments are derived from Dream_Text."]}
     _cluster_cache.update(key=key,value=response)
     return response
 

@@ -1,23 +1,23 @@
 import React from 'react';
 
 const EMOTION_COLORS: Record<string, string> = {
-  fear: 'bg-red-500/20 text-red-400 border-red-500/30',
-  joy: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-  neutral: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  disgust: 'bg-green-600/20 text-green-400 border-green-600/30',
-  sadness: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  anger: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  surprise: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  positive: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  negative: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
+  fear: 'bg-[#FDF2F0] text-[#B91C1C] border-[#FCA5A5]',
+  joy: 'bg-[#FEF9ED] text-[#B45309] border-[#FCD34D]',
+  neutral: 'bg-[#F5F5F4] text-[#57534E] border-[#D6D3D1]',
+  disgust: 'bg-[#F0FDF4] text-[#15803D] border-[#86EFAC]',
+  sadness: 'bg-[#EFF6FF] text-[#1D4ED8] border-[#93C5FD]',
+  anger: 'bg-[#FFF1EC] text-[#C2410C] border-[#FDBA74]',
+  surprise: 'bg-[#FAF5FF] text-[#7E22CE] border-[#D8B4FE]',
+  positive: 'bg-[#ECFDF5] text-[#047857] border-[#6EE7B7]',
+  negative: 'bg-[#FFF1F2] text-[#BE123C] border-[#FDA4AF]',
 };
 
 export default function EmotionBadge({ emotion, className = '' }: { emotion: string; className?: string }) {
   const normalized = emotion.toLowerCase();
-  const colorClass = EMOTION_COLORS[normalized] || 'bg-gray-700 text-gray-300 border-gray-600';
+  const colorClass = EMOTION_COLORS[normalized] || 'bg-[#FAF7F2] text-[#78716C] border-[#E8AEA0]';
 
   return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${colorClass} ${className}`}>
+    <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-mono tracking-wide font-medium border ${colorClass} ${className}`}>
       {emotion}
     </span>
   );

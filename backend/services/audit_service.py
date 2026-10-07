@@ -4,6 +4,7 @@ import os
 import fcntl
 from datetime import datetime
 from config import settings
+from services.csv_storage import blob_enabled, csv_storage
 
 class AuditService:
     @staticmethod
@@ -14,6 +15,10 @@ class AuditService:
             "dream_id": dream_id,
             "details": details
         }
+
+        if blob_enabled():
+            csv_storage.write_audit_event({**log_entry, "details": json.dumps(details, ensure_ascii=False, sort_keys=True)})
+            return
         
         # Ensure directory exists
         os.makedirs(os.path.dirname(settings.AUDIT_LOG_PATH), exist_ok=True)
@@ -33,6 +38,12 @@ class AuditService:
 
     @staticmethod
     def get_all():
+        if blob_enabled():
+            lines = csv_storage.read_audit_events()
+            for row in lines:
+                try: row['details'] = json.loads(row.get('details', '{}'))
+                except (TypeError, json.JSONDecodeError): row['details'] = {}
+            return lines
         if not os.path.exists(settings.AUDIT_LOG_PATH):
             return []
             

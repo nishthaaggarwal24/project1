@@ -93,6 +93,7 @@ export interface ClusterAnalysisResponse {
   selected_k?: number;
   method?: string;
   limitation?: string;
+  limitations?: string[];
   cluster_count_scores?: { k: number; inertia: number; silhouette: number; elbow_strength?: number; selection_score?: number }[];
   clusters: {
     cluster_id: number;

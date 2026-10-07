@@ -20,3 +20,11 @@ Emotion climate percentages are transparent case-insensitive lexicon counts over
 ## Start
 
 Run `./start.sh`. Backend defaults expect the supplied dataset at the path above. For another location, export `DATASET_PATH=/absolute/path/to/dataset.csv` before starting.
+
+## Vercel deployment
+
+- The Vercel entrypoint serves the existing FastAPI routes and the built React app from the same origin. `requirements.txt` intentionally omits the optional Sentence Transformers/PyTorch stack to keep the function bundle within Vercel's size limit; the app reports embedding unavailability and uses its documented supported alternatives.
+- Connect the private `dreamtwin-data` Blob store to the DreamTwin project for Production and Preview. Upload the unchanged source file as `source/dataset_deduplicated.csv` with **Private** access. The original local CSV is never included in Git or the function bundle.
+- The source CSV stays immutable in Blob. Each real app submission is stored verbatim in its own private, append-only CSV record under `submissions/`, and audit events are stored as private CSV records under `audit/`. The loader combines these real records for analysis; no database or generated dream data is used.
+- In Vercel project Security → Deployment Protection, enable Vercel Authentication for **All Deployments** (including Production) before uploading the source corpus. Keep the Blob store private.
+- Vercel deployments require the connected store's `BLOB_STORE_ID` and platform OIDC environment, supplied when the store is connected. Local development continues to use the filesystem CSV paths described above.

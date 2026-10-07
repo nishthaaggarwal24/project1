@@ -15,6 +15,7 @@ from config import settings
 from services.nlp_service import nlp_service
 from services.audit_service import audit_service
 from services.embedding_service import embedding_service
+from services.csv_storage import blob_enabled, csv_storage
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 router = APIRouter(prefix="/api/system-a", tags=["Individual Workspace"])
@@ -334,25 +335,43 @@ def submit_dream(req: SubmitDreamRequest):
     now=datetime.now(timezone.utc).isoformat(); dream_id="U"+uuid.uuid4().hex
     sentiment=nlp_service.vader_analyze(text); symbols=nlp_service.symbol_match(text)
     word_count=_word_count(text)
-    path=Path(settings.DATASET_PATH).expanduser().resolve()
-    with path.open("r+",newline="",encoding="utf-8-sig") as handle:
-        fcntl.flock(handle.fileno(),fcntl.LOCK_EX)
-        reader=csv.DictReader(handle); fieldnames=reader.fieldnames or []
-        if not {"Dream_ID","Dream_Text"}.issubset(fieldnames): raise HTTPException(500,"Source CSV schema does not support dream submissions")
-        existing_ids={row.get("Dream_ID","") for row in reader}
-        if dream_id in existing_ids: raise HTTPException(409,"Dream ID collision; retry submission")
-        record={key:"" for key in fieldnames}; record.update({"Dream_ID":dream_id,"Dream_Text":text})
-        if "Sentiment" in record: record["Sentiment"]=str(sentiment["compound"])
-        if "Word_Count" in record: record["Word_Count"]=str(word_count)
-        handle.seek(0,os.SEEK_END)
-        end=handle.tell()
-        if end:
-            if os.pread(handle.fileno(),1,end-1) not in (b"\n",b"\r"):
-                handle.seek(0,os.SEEK_END); handle.write("\n")
-        handle.seek(0,os.SEEK_END); csv.writer(handle).writerow([record.get(key,"") for key in fieldnames]); handle.flush(); os.fsync(handle.fileno())
-        fcntl.flock(handle.fileno(),fcntl.LOCK_UN)
+    if blob_enabled():
+        df = data_loader.get_df()
+        fieldnames = [c for c in df.columns if c not in {"_source", "_source_row_hash"}]
+        if not {"Dream_ID", "Dream_Text"}.issubset(fieldnames):
+            raise HTTPException(500, "Source CSV schema does not support dream submissions")
+        if "Submitted_At" not in fieldnames:
+            fieldnames.append("Submitted_At")
+        record = {key: "" for key in fieldnames}
+        record.update({"Dream_ID": dream_id, "Dream_Text": text, "Submitted_At": now})
+        if "Sentiment" in record: record["Sentiment"] = str(sentiment["compound"])
+        if "Word_Count" in record: record["Word_Count"] = str(word_count)
+        try:
+            csv_storage.write_submission(fieldnames, record)
+        except Exception as exc:
+            raise HTTPException(503, f"Could not persist dream to private CSV storage: {type(exc).__name__}") from exc
+        source_path = "private Vercel Blob CSV storage"
+    else:
+        path=Path(settings.DATASET_PATH).expanduser().resolve()
+        with path.open("r+",newline="",encoding="utf-8-sig") as handle:
+            fcntl.flock(handle.fileno(),fcntl.LOCK_EX)
+            reader=csv.DictReader(handle); fieldnames=reader.fieldnames or []
+            if not {"Dream_ID","Dream_Text"}.issubset(fieldnames): raise HTTPException(500,"Source CSV schema does not support dream submissions")
+            existing_ids={row.get("Dream_ID","") for row in reader}
+            if dream_id in existing_ids: raise HTTPException(409,"Dream ID collision; retry submission")
+            record={key:"" for key in fieldnames}; record.update({"Dream_ID":dream_id,"Dream_Text":text})
+            if "Sentiment" in record: record["Sentiment"]=str(sentiment["compound"])
+            if "Word_Count" in record: record["Word_Count"]=str(word_count)
+            handle.seek(0,os.SEEK_END)
+            end=handle.tell()
+            if end:
+                if os.pread(handle.fileno(),1,end-1) not in (b"\n",b"\r"):
+                    handle.seek(0,os.SEEK_END); handle.write("\n")
+            handle.seek(0,os.SEEK_END); csv.writer(handle).writerow([record.get(key,"") for key in fieldnames]); handle.flush(); os.fsync(handle.fileno())
+            fcntl.flock(handle.fileno(),fcntl.LOCK_UN)
+        source_path = str(path)
     processed=datetime.now(timezone.utc).isoformat()
-    audit_service.log_event("dream_appended_to_source_csv",dream_id,{"submission_time":now,"processing_time":processed,"features_extracted":{"word_count":word_count,"vader":sentiment,"literal_symbol_matches":symbols},"source_path":str(path),"other fields":"left blank when not directly observed or supported"})
+    audit_service.log_event("dream_appended_to_source_csv",dream_id,{"submission_time":now,"processing_time":processed,"features_extracted":{"word_count":word_count,"vader":sentiment,"literal_symbol_matches":symbols},"source_path":source_path,"other fields":"left blank when not directly observed or supported"})
     data_loader.refresh()
     # Refresh the cached source embeddings after the CSV append. The service is
     # lazy and reports model unavailability without substituting generated data.
@@ -362,4 +381,5 @@ def submit_dream(req: SubmitDreamRequest):
         # A failed optional model refresh must not turn a successful CSV append
         # into an apparent failed submission.
         audit_service.log_event("dream_embedding_refresh_failed",dream_id,{"error":f"{type(exc).__name__}: {exc}"})
-    return {"dream_id":dream_id,"submitted_at":now,"analysis":{"sentiment":sentiment,"matched_symbols":symbols,"analysis_confidence":"low" if word_count<20 else "lexical_only","cluster_assignment":None},"message":"Dream narrative appended verbatim to the source CSV. Existing rows were not rewritten."}
+    message = "Dream narrative stored verbatim as an append-only private CSV record. The source dataset remains unchanged." if blob_enabled() else "Dream narrative appended verbatim to the source CSV. Existing rows were not rewritten."
+    return {"dream_id":dream_id,"submitted_at":now,"analysis":{"sentiment":sentiment,"matched_symbols":symbols,"analysis_confidence":"low" if word_count<20 else "lexical_only","cluster_assignment":None},"message":message}

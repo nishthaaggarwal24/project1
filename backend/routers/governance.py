@@ -8,6 +8,7 @@ from data_loader import data_loader
 from config import settings
 from services.audit_service import audit_service
 from services.nlp_service import nlp_service
+from services.csv_storage import blob_enabled
 
 router = APIRouter(prefix="/api/governance", tags=["Governance"])
 
@@ -53,7 +54,7 @@ def check_synthetic_data():
         "total_checked": len(ids),
         "violations": violations,
         "method": "Each record ID and exact narrative are checked against a SHA-256 row digest captured during source loading.",
-        "source_dataset_path": settings.DATASET_PATH,
+        "source_dataset_path": "private Vercel Blob: source/dataset_deduplicated.csv" if blob_enabled() else settings.DATASET_PATH,
         "source_file_modified": False,
         "source_quality": data_loader.get_stats()["source_quality"]
     }

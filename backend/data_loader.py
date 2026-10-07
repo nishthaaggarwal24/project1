@@ -1,8 +1,10 @@
 """Load the source-of-truth CSV and distinguish real submitted rows by reserved ID prefix."""
 import hashlib
+import io
 import os
 import pandas as pd
 from config import settings
+from services.csv_storage import blob_enabled, csv_storage
 
 
 class DataLoader:
@@ -37,9 +39,12 @@ class DataLoader:
     def load_dataset(self) -> pd.DataFrame:
         if self._df is not None:
             return self._df
-        if not os.path.exists(settings.DATASET_PATH):
-            raise FileNotFoundError(f"Dataset not found at {settings.DATASET_PATH}. Set DATASET_PATH to the supplied CSV.")
-        source_df = pd.read_csv(settings.DATASET_PATH, keep_default_na=False)
+        if blob_enabled():
+            source_df = pd.read_csv(io.StringIO(csv_storage.read_source_csv()), keep_default_na=False)
+        else:
+            if not os.path.exists(settings.DATASET_PATH):
+                raise FileNotFoundError(f"Dataset not found at {settings.DATASET_PATH}. Set DATASET_PATH to the supplied CSV.")
+            source_df = pd.read_csv(settings.DATASET_PATH, keep_default_na=False)
         valid = (source_df["Dream_ID"].astype(str).str.strip().ne("") &
                  source_df["Dream_Text"].astype(str).str.strip().ne(""))
         excluded_indices = source_df.index[~valid].tolist()
@@ -55,7 +60,23 @@ class DataLoader:
             lambda r: hashlib.sha256((str(r["Dream_ID"]) + "\0" + str(r["Dream_Text"])).encode("utf-8")).hexdigest(), axis=1
         )
         frames = [source_df]
-        if os.path.exists(settings.APP_SUBMISSIONS_PATH):
+        if blob_enabled():
+            submissions = []
+            for _, content in csv_storage.read_csv_records("submissions/"):
+                frame = pd.read_csv(io.StringIO(content), keep_default_na=False)
+                self._validate_records(frame, "private user submissions")
+                submissions.append(frame)
+            if submissions:
+                submitted = pd.concat(submissions, ignore_index=True, sort=False)
+                if set(submitted["Dream_ID"].astype(str)) & set(source_df["Dream_ID"].astype(str)):
+                    raise ValueError("User submission Dream_ID collides with a source Dream_ID")
+                self._validate_records(submitted, "private user submissions")
+                submitted["_source"] = "user_submission"
+                submitted["_source_row_hash"] = submitted.apply(
+                    lambda r: hashlib.sha256((str(r["Dream_ID"]) + "\0" + str(r["Dream_Text"])).encode("utf-8")).hexdigest(), axis=1
+                )
+                frames.append(submitted)
+        elif settings.APP_SUBMISSIONS_PATH and os.path.exists(settings.APP_SUBMISSIONS_PATH):
             submissions = pd.read_csv(settings.APP_SUBMISSIONS_PATH, keep_default_na=False)
             self._validate_records(submissions, "user submissions")
             if set(submissions["Dream_ID"].astype(str)) & set(source_df["Dream_ID"].astype(str)):

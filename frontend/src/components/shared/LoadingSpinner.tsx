@@ -2,9 +2,9 @@ import React from 'react';
 
 export default function LoadingSpinner({ message = 'Loading...' }: { message?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-4">
-      <div className="w-10 h-10 border-4 border-dream-purple border-t-transparent rounded-full animate-spin"></div>
-      <p className="text-gray-400 animate-pulse">{message}</p>
+    <div className="flex flex-col items-center justify-center p-8 space-y-3">
+      <div className="w-8 h-8 border-2 border-[#E8AEA0] border-t-[#DE6B48] rounded-full animate-spin"></div>
+      <p className="text-xs font-mono tracking-wider text-[#78716C] animate-pulse uppercase">{message}</p>
     </div>
   );
 }

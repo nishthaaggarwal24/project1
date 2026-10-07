@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -36,6 +38,15 @@ def health_check():
 app.include_router(system_a.router)
 app.include_router(system_b.router)
 app.include_router(governance.router)
+
+# On Vercel, serve the built React app from the same origin as the API. The
+# static mount is registered last so all existing API routes keep precedence.
+if os.getenv("VERCEL"):
+    from fastapi.staticfiles import StaticFiles
+
+    frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    if frontend_dist.exists():
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
