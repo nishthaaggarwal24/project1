@@ -49,7 +49,7 @@ export default function ClusterAnalysis() {
         {data.available && <p className="text-xs text-indigo-300 mb-4">Selected k={data.selected_k} from equal-weight normalized elbow-curvature and silhouette scores. Source Cluster_ID values are blank and were not used.</p>}
         {!data.available && <p className="text-xs text-amber-300 mb-4">{data.limitation}</p>}
         {data.cluster_count_scores && data.cluster_count_scores.length > 0 && <div className="flex flex-wrap gap-3 text-xs text-gray-400 mb-4">{data.cluster_count_scores.map(score => <span key={score.k}>k={score.k}: inertia {score.inertia.toFixed(1)}, silhouette {score.silhouette.toFixed(3)}, elbow {score.elbow_strength?.toFixed(2)}</span>)}</div>}
-        <div className="h-[250px]">
+        {data.available && scatterData.length > 0 ? <div className="h-[250px]">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2d2060" />
@@ -68,7 +68,7 @@ export default function ClusterAnalysis() {
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
-        </div>
+        </div> : <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-5 text-sm leading-6 text-gray-400">The cluster chart is hidden because no cluster assignments are available. When sentence embeddings are ready and clustering succeeds, the chart will appear here.</div>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

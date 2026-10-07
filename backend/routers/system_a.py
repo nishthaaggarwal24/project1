@@ -166,7 +166,7 @@ def get_twin_profile():
     stage = "Dream Explorer" if progress < 34 else "Pattern Recognition" if progress < 67 else "Digital Twin Activated"
     emotion_counts=emotions.value_counts()
     return {"total_dreams": n, "stage": stage, "progress_score": progress,
-            "confidence_pct": progress, "confidence": progress, "confidence_formula": "Progress = 100 * (min(record_count/100,1) + recurring_symbol_fraction + min(mean_word_count/300,1)) / 3. Stage 1 <34, Stage 2 34–<67, Stage 3 ≥67. Historical consistency is unavailable because timestamps are absent; the score is a heuristic, not a calibrated probability.",
+            "confidence_pct": progress, "confidence": progress, "confidence_formula": "The score gives equal weight to three dataset measures: dream count (up to 100), the share of tracked symbols appearing in at least three dreams, and average narrative length (up to 300 words). The stages are Dream Explorer (below 34), Pattern Recognition (34 to under 67), and Digital Twin Activated (67 or higher). This is a dataset summary, not a probability or a measure of one person's progress.",
             "dominant_emotion": emotion_counts.index[0] if len(emotion_counts) else "unavailable",
             "emotional_diversity": float(1-shares.max()) if len(shares) else 0,
             "patterns_detected":len(recurring_symbols),"symbols_learned":len(observed_symbols),
